@@ -1,0 +1,21 @@
+{
+  "template": "https://github.com/jamesls/jmes-cookiecutter-python-package",
+  "commit": "344920fc46326fa0529866ea6bd49d0efb4206ed",
+  "checkout": null,
+  "context": {
+    "cookiecutter": {
+      "project_name": "markdown-print",
+      "project_slug": "markdown-print",
+      "package_name": "mdp",
+      "project_short_description": "Markdown Syntax Renderer",
+      "year": "2025",
+      "version": "0.0.1",
+      "github_username": "jamesls",
+      "full_name": "James Saryerwinnie",
+      "email": "js@jamesls.com",
+      "pypi_username": "jamesls",
+      "_template": "https://github.com/jamesls/jmes-cookiecutter-python-package"
+    }
+  },
+  "directory": null
+}
