@@ -17,6 +17,12 @@ class LeftAlignedHeading(RichHeading):
     ) -> RenderResult:
         text = self.text
         text.justify = "left"
+
+        # Prepend markdown header syntax based on heading level
+        level = int(self.tag[1])  # Extract number from h1, h2, etc.
+        prefix = "#" * level + " "
+        text = Text(prefix, style=text.style) + text
+
         if self.tag == "h1":
             yield Panel(text, box=box.HEAVY, style="markdown.h1.border")
             return

@@ -44,4 +44,4 @@ def test_markdown_headings_render_left_aligned() -> None:
 
     rendered = output.getvalue().splitlines()
     heading_line = next(line for line in rendered if "Hello" in line)
-    assert heading_line.startswith("Hello")
+    assert heading_line.startswith("### Hello")
