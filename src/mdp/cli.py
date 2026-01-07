@@ -8,7 +8,7 @@ from pygments.styles import get_style_by_name
 from rich.console import Console
 from rich.theme import Theme
 
-from mdp.rich_markdown import LeftAlignedMarkdown
+from mdp.markdown import LeftAlignedMarkdown
 
 DEFAULT_CODE_THEME = "nord-darker"
 DEFAULT_WIDTH = 100

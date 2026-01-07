@@ -7,7 +7,7 @@ import pytest
 from rich.console import Console
 
 from mdp.cli import main
-from mdp.rich_markdown import LeftAlignedMarkdown
+from mdp.markdown import LeftAlignedMarkdown
 
 
 def test_main_renders_markdown_to_stdout(
