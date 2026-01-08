@@ -1,14 +1,23 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
 from collections.abc import Sequence
 from pathlib import Path
 
 from pygments.styles import get_style_by_name
 from rich.console import Console
+from rich.pager import Pager
 from rich.theme import Theme
 
 from mdp.markdown import LeftAlignedMarkdown
+
+
+class LessPager(Pager):
+    """Pager that uses less with ANSI color support."""
+
+    def show(self, content: str) -> None:
+        subprocess.run(["less", "-R"], input=content, text=True)
 
 DEFAULT_CODE_THEME = "nord-darker"
 DEFAULT_WIDTH = 100
@@ -30,6 +39,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         metavar="PATH",
         help="Path to a Markdown file.",
     )
+    parser.add_argument(
+        "--page",
+        action="store_true",
+        help="Use a pager to display output with color support.",
+    )
     args = parser.parse_args(argv)
 
     markdown_path = Path(args.path)
@@ -40,12 +54,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     except OSError as exc:
         parser.error(f"Failed to read {markdown_path}: {exc}")
 
-    console = Console(width=DEFAULT_WIDTH, theme=DEFAULT_CONSOLE_THEME)
-    console.print(
-        LeftAlignedMarkdown(
-            markdown_body,
-            code_theme=DEFAULT_CODE_THEME,
-            hyperlinks=True,
-        )
+    console = Console(
+        width=DEFAULT_WIDTH,
+        theme=DEFAULT_CONSOLE_THEME,
+        force_terminal=True if args.page else None,
     )
+    markdown = LeftAlignedMarkdown(
+        markdown_body,
+        code_theme=DEFAULT_CODE_THEME,
+        hyperlinks=True,
+    )
+    if args.page:
+        with console.pager(pager=LessPager(), styles=True):
+            console.print(markdown)
+    else:
+        console.print(markdown)
     return 0
