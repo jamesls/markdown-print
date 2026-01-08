@@ -43,12 +43,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--page",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=True,
         help="Use a pager to display output with color support.",
     )
     parser.add_argument(
         "--center",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=True,
         help="Center the rendered markdown horizontally on the terminal.",
     )
     args = parser.parse_args(argv)
