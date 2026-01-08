@@ -6,7 +6,8 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from pygments.styles import get_style_by_name
-from rich.console import Console
+from rich.align import Align
+from rich.console import Console, RenderableType
 from rich.pager import Pager
 from rich.theme import Theme
 
@@ -18,6 +19,7 @@ class LessPager(Pager):
 
     def show(self, content: str) -> None:
         subprocess.run(["less", "-R"], input=content, text=True)
+
 
 DEFAULT_CODE_THEME = "nord-darker"
 DEFAULT_WIDTH = 100
@@ -44,6 +46,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="Use a pager to display output with color support.",
     )
+    parser.add_argument(
+        "--center",
+        action="store_true",
+        help="Center the rendered markdown horizontally on the terminal.",
+    )
     args = parser.parse_args(argv)
 
     markdown_path = Path(args.path)
@@ -55,7 +62,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error(f"Failed to read {markdown_path}: {exc}")
 
     console = Console(
-        width=DEFAULT_WIDTH,
+        width=None if args.center else DEFAULT_WIDTH,
         theme=DEFAULT_CONSOLE_THEME,
         force_terminal=True if args.page else None,
     )
@@ -64,9 +71,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         code_theme=DEFAULT_CODE_THEME,
         hyperlinks=True,
     )
+    renderable: RenderableType = markdown
+    if args.center:
+        renderable = Align.center(markdown, width=DEFAULT_WIDTH, pad=False)
     if args.page:
         with console.pager(pager=LessPager(), styles=True):
-            console.print(markdown)
+            console.print(renderable)
     else:
-        console.print(markdown)
+        console.print(renderable)
     return 0
