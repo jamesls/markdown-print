@@ -16,7 +16,7 @@ def test_main_renders_markdown_to_stdout(
     markdown_file = tmp_path / "sample.md"
     markdown_file.write_text("# Title\n\nHello **world**\n", encoding="utf-8")
 
-    exit_code = main([str(markdown_file)])
+    exit_code = main([str(markdown_file), "--no-page"])
 
     captured = capsys.readouterr()
     assert exit_code == 0
@@ -45,3 +45,42 @@ def test_markdown_headings_render_left_aligned() -> None:
     rendered = output.getvalue().splitlines()
     heading_line = next(line for line in rendered if "Hello" in line)
     assert heading_line.startswith("### Hello")
+
+
+def test_main_with_no_page_flag(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    markdown_file = tmp_path / "sample.md"
+    markdown_file.write_text("# Title\n\nContent\n", encoding="utf-8")
+
+    exit_code = main([str(markdown_file), "--no-page"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "Title" in captured.out
+
+
+def test_main_with_no_center_flag(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    markdown_file = tmp_path / "sample.md"
+    markdown_file.write_text("# Title\n\nContent\n", encoding="utf-8")
+
+    exit_code = main([str(markdown_file), "--no-center", "--no-page"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "Title" in captured.out
+
+
+def test_main_with_both_no_flags(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    markdown_file = tmp_path / "sample.md"
+    markdown_file.write_text("**Bold** text\n", encoding="utf-8")
+
+    exit_code = main([str(markdown_file), "--no-page", "--no-center"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "Bold" in captured.out

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Callable
 
 from pygments.styles import get_style_by_name
 from rich.align import Align
@@ -11,11 +12,22 @@ from rich.theme import Theme
 from mdp.markdown import LeftAlignedMarkdown
 
 
+def _run_less(args: list[str], content: str) -> None:
+    """Default command runner that invokes subprocess.run."""
+    subprocess.run(args, input=content, text=True)
+
+
 class LessPager(Pager):
     """Pager that uses less with ANSI color support."""
 
+    def __init__(
+        self, runner: Callable[[list[str], str], None] | None = None
+    ) -> None:
+        self._runner = runner if runner is not None else _run_less
+
     def show(self, content: str) -> None:
-        subprocess.run(["less", "-R"], input=content, text=True)
+        self._runner(["less", "-R"], content)
+
 
 __all__ = ["render_markdown", "LeftAlignedMarkdown"]
 
@@ -37,6 +49,7 @@ def render_markdown(
     page: bool = False,
     code_theme: str = DEFAULT_CODE_THEME,
     hyperlinks: bool = True,
+    pager: Pager | None = None,
 ) -> None:
     """Render markdown text to the console.
 
@@ -47,6 +60,7 @@ def render_markdown(
         page: Send output through a pager (less).
         code_theme: Pygments theme for code blocks.
         hyperlinks: Render clickable hyperlinks.
+        pager: Custom pager instance (defaults to LessPager when page=True).
     """
     console = Console(
         width=None if center else width,
@@ -62,7 +76,8 @@ def render_markdown(
     if center:
         renderable = Align.center(markdown, width=width, pad=False)
     if page:
-        with console.pager(pager=LessPager(), styles=True):
+        actual_pager = pager if pager is not None else LessPager()
+        with console.pager(pager=actual_pager, styles=True):
             console.print(renderable)
     else:
         console.print(renderable)
