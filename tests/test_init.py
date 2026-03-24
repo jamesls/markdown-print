@@ -13,6 +13,7 @@ def test_render_markdown_outputs_content(capsys) -> None:
     captured = capsys.readouterr()
     assert "Hello" in captured.out
     assert "World" in captured.out
+    assert "2 words • ~1 min read" in captured.out
 
 
 def test_render_markdown_with_custom_width(capsys) -> None:
@@ -32,6 +33,7 @@ def test_render_markdown_with_page_uses_provided_pager() -> None:
     mock_pager.show.assert_called_once()
     call_args = mock_pager.show.call_args
     assert "Test" in call_args[0][0]
+    assert "1 word • ~1 min read" in call_args[0][0]
 
 
 def test_render_markdown_with_code_block(capsys) -> None:
@@ -54,3 +56,28 @@ def test_render_markdown_renders_links(capsys) -> None:
 
     captured = capsys.readouterr()
     assert "Example" in captured.out
+
+
+def test_render_markdown_footer_ignores_markdown_syntax(capsys) -> None:
+    render_markdown("# Title\n\n- one\n- two\n\nThis is **bold**.", page=False)
+
+    captured = capsys.readouterr()
+    assert "6 words • ~1 min read" in captured.out
+
+
+def test_render_markdown_footer_excludes_link_urls_and_code_blocks(
+    capsys,
+) -> None:
+    render_markdown(
+        (
+            "[Example link](https://example.com)\n\n"
+            "```python\n"
+            "print('hello world')\n"
+            "```\n\n"
+            "Some `inline code` here"
+        ),
+        page=False,
+    )
+
+    captured = capsys.readouterr()
+    assert "6 words • ~1 min read" in captured.out

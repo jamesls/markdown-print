@@ -35,3 +35,20 @@ def test_less_pager_with_multiline_content() -> None:
     pager.show(multiline)
 
     mock_runner.assert_called_once_with(["less", "-R"], multiline)
+
+
+def test_less_pager_includes_prompt_when_provided() -> None:
+    mock_runner = Mock()
+    prompt = (
+        "10 words | ~1 min read | line %lt-%lb of {total_lines}?Pb (%Pb\\%)."
+    )
+    pager = LessPager(runner=mock_runner, prompt=prompt)
+    content = "line1\nline2\nline3\n"
+
+    pager.show(content)
+
+    expected_prompt = "10 words | ~1 min read | line %lt-%lb of 3?Pb (%Pb\\%)."
+    mock_runner.assert_called_once_with(
+        ["less", "-R", "-P", expected_prompt],
+        content,
+    )
