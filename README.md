@@ -54,3 +54,20 @@ You can activate the venv with:
 ```sh
 . .venv/bin/activate
 ```
+
+## Releases
+
+To publish a new pypi release, bump all the version, create a git tag,
+and push everything up to GitHub.  There's a helper script you should use:
+
+```
+$ ./scripts/stage-release patch
+
+... omitted ...
+You can now run:
+
+git push origin main --tags
+
+
+$ git push origin main --tags
+```
