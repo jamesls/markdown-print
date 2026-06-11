@@ -1,6 +1,6 @@
 [project]
 name = "markdown-print"
-version = "0.0.1"
+version = "0.0.3"
 description = "Markdown Syntax Renderer"
 authors = [
   { name="James Saryerwinnie", email="js@jamesls.com"},
