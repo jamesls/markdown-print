@@ -4,7 +4,7 @@ import argparse
 from collections.abc import Sequence
 from pathlib import Path
 
-from mdp import render_markdown
+from mdp import DEFAULT_WIDTH, render_markdown
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -29,6 +29,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=True,
         help="Center the rendered markdown horizontally on the terminal.",
     )
+    parser.add_argument(
+        "--width",
+        type=int,
+        default=DEFAULT_WIDTH,
+        help="Maximum width for rendering.",
+    )
     args = parser.parse_args(argv)
 
     markdown_path = Path(args.path)
@@ -39,5 +45,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     except OSError as exc:
         parser.error(f"Failed to read {markdown_path}: {exc}")
 
-    render_markdown(markdown_body, center=args.center, page=args.page)
+    render_markdown(
+        markdown_body,
+        width=args.width,
+        center=args.center,
+        page=args.page,
+    )
     return 0

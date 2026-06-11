@@ -73,6 +73,29 @@ def test_main_with_no_center_flag(
     assert "Title" in captured.out
 
 
+def test_main_with_width_flag_limits_output_width(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    markdown_file = tmp_path / "sample.md"
+    markdown_file.write_text(
+        "This is a very long line " * 10,
+        encoding="utf-8",
+    )
+
+    exit_code = main([
+        str(markdown_file),
+        "--width",
+        "40",
+        "--no-center",
+        "--no-page",
+    ])
+
+    captured = capsys.readouterr()
+    lines = captured.out.strip().split("\n")
+    assert exit_code == 0
+    assert all(len(line) <= 40 for line in lines)
+
+
 def test_main_with_both_no_flags(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
