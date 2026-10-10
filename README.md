@@ -7,7 +7,7 @@ actual parsing and rendering, this package just configures it with:
 - Nord-darker theme for code blocks with matching inline code styling
 - Left-aligned headings with visible `#` prefix markers
 - H1 rendered in a panel, other headings styled normally
-- Paged output via `less -R` by default (preserves ANSI colors)
+- An interactive reader with mouse selection and clipboard copying
 - Horizontally centered content within a 100-character width
 - A `render_markdown()` function for programmatic use
 
@@ -33,6 +33,28 @@ uv tool install markdown-print
 ```sh
 mdp path/to/file.md
 ```
+
+Drag across any part of the document and release to copy the highlighted
+text. Paste normally in another app. The copy omits the centering margin
+and code-block padding, preserves code indentation, and contains no color
+escape sequences. Rendered line breaks and visible Markdown decorations
+(such as list bullets) are preserved.
+
+You can also press `Ctrl+C` or `y` to copy the selection again. `Esc` clears
+it. Use the mouse wheel or arrow keys to scroll, `Space`/`b` to page down/up,
+`g`/`G` to jump to the beginning/end, and `q` to quit. `/` opens search;
+press `Enter` to find text and `n`/`N` for the next/previous matching line.
+
+Copying uses `pbcopy` on macOS, or `wl-copy`, `xclip`, or `xsel` when
+available on Linux. Otherwise, including over SSH, it sends a clipboard
+request to your terminal using OSC 52. The terminal must support and allow
+these requests; the status bar distinguishes a native copy from a request
+sent to the terminal. Drag without holding `Shift`, which many terminals
+reserve for their own selection (including the centering spaces).
+
+Use `--pager less` for the original `less -R` reader, or `--no-page` to
+print directly. The default reader prints normally when input or output
+is redirected. Clean mouse copying is available in the interactive reader.
 
 ## Development
 

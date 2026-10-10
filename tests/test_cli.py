@@ -107,3 +107,24 @@ def test_main_with_both_no_flags(
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "Bold" in captured.out
+
+
+def test_default_reader_prints_plain_output_when_redirected(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    markdown_file = tmp_path / "sample.md"
+    markdown_file.write_text("Hello **world**", encoding="utf-8")
+    assert main([str(markdown_file)]) == 0
+    output = capsys.readouterr().out
+    assert "Hello world" in output
+    assert "\x1b" not in output
+
+
+@pytest.mark.parametrize("width", ["0", "-1"])
+def test_main_rejects_invalid_width(
+    width: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as error:
+        main(["unused.md", "--width", width])
+    assert error.value.code == 2
+    assert "--width must be greater than zero" in capsys.readouterr().err

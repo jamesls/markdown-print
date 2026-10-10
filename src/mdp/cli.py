@@ -21,7 +21,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--page",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="Use a pager to display output with color support.",
+        help="Use the interactive reader with text selection (default).",
+    )
+    parser.add_argument(
+        "--pager",
+        choices=("reader", "less"),
+        default="reader",
+        help="Choose the selectable reader or the original less pager.",
     )
     parser.add_argument(
         "--center",
@@ -36,6 +42,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Maximum width for rendering.",
     )
     args = parser.parse_args(argv)
+    if args.width < 1:
+        parser.error("--width must be greater than zero")
 
     markdown_path = Path(args.path)
     try:
@@ -50,5 +58,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         width=args.width,
         center=args.center,
         page=args.page,
+        pager="less" if args.pager == "less" else None,
     )
     return 0

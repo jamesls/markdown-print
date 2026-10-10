@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import subprocess
 import re
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Literal
 
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
@@ -14,7 +16,7 @@ from rich.pager import Pager
 from rich.text import Text
 from rich.theme import Theme
 
-from mdp.markdown import LeftAlignedMarkdown
+from mdp.markdown import LeftAlignedMarkdown, SelectableMarkdown
 
 
 def _run_less(args: list[str], content: str) -> None:
@@ -142,7 +144,7 @@ def render_markdown(
     page: bool = False,
     code_theme: str = DEFAULT_CODE_THEME,
     hyperlinks: bool = True,
-    pager: Pager | None = None,
+    pager: Pager | Literal["less"] | None = None,
 ) -> None:
     """Render markdown text to the console.
 
@@ -150,15 +152,20 @@ def render_markdown(
         text: Markdown string to render.
         width: Maximum width for rendering.
         center: Center output horizontally in terminal.
-        page: Send output through a pager (less).
+        page: Open the selectable reader when attached to a terminal.
         code_theme: Pygments theme for code blocks.
         hyperlinks: Render clickable hyperlinks.
-        pager: Custom pager instance (defaults to LessPager when page=True).
+        pager: Custom pager or "less", instead of the interactive reader.
     """
+    if width < 1:
+        raise ValueError("width must be greater than zero")
+    interactive = page and sys.stdin.isatty() and sys.stdout.isatty()
     console = Console(
         width=None if center else width,
         theme=DEFAULT_CONSOLE_THEME,
-        force_terminal=True if page else None,
+        force_terminal=(
+            True if interactive or (page and pager is not None) else None
+        ),
     )
     markdown = LeftAlignedMarkdown(
         text,
@@ -167,14 +174,27 @@ def render_markdown(
     )
     stats = _get_document_stats(text)
     footer = _build_footer(stats)
+    if interactive and pager is None:
+        from mdp.reader import show_reader
+
+        show_reader(
+            SelectableMarkdown(
+                text, code_theme=code_theme, hyperlinks=hyperlinks
+            ),
+            console,
+            width=width,
+            center=center,
+            stats=footer.plain,
+        )
+        return
     renderable: RenderableType = Group(markdown, Text(""), footer)
     if center:
         renderable = Align.center(renderable, width=width, pad=False)
-    if page:
+    if page and pager is not None:
         actual_pager = (
-            pager
-            if pager is not None
-            else LessPager(prompt=_build_pager_prompt(stats))
+            LessPager(prompt=_build_pager_prompt(stats))
+            if pager == "less"
+            else pager
         )
         with console.pager(pager=actual_pager, styles=True):
             console.print(renderable)
