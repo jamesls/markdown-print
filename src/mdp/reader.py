@@ -16,8 +16,12 @@ from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
 from textual.containers import VerticalScroll
+from textual.geometry import Offset
 from textual.message import Message
+from textual.reactive import var
+from textual.screen import Screen
 from textual.selection import Selection
+from textual.widget import Widget
 from textual.widgets import Input, Static
 
 
@@ -120,9 +124,54 @@ class Document(Static):
                 lines[index] = line[max(0, indent - column) :]
         return "\n".join(line.rstrip() for line in lines), ending
 
+    def nearest_offset(self, x: int, y: int) -> Offset:
+        """Return the visible text position closest to a screen position.
+
+        Positions beside a line resolve to its start or end, and positions
+        past the visible lines resolve to the nearest visible line, so a
+        drag never reaches text scrolled out of view.
+        """
+        lines = str(self.content).split("\n")
+        region = self.content_region
+        visible = self.screen.find_widget(self).visible_region
+        row = min(max(y, visible.y), visible.bottom - 1) - region.y
+        row = min(row, len(lines) - 1)
+        before = y < visible.y or (y < visible.bottom and x < region.x)
+        return Offset(0 if before else len(lines[row]), row)
+
 
 class Status(Static):
     ALLOW_SELECT = False
+
+
+class ReaderScreen(Screen[None]):
+    """Keeps document drags on the pointer's row when it leaves the text."""
+
+    dragging = var(False)
+
+    def on_mount(self) -> None:
+        self.text_selection_started_signal.subscribe(
+            self, self.start_drag, immediate=True
+        )
+
+    def start_drag(self, screen: Screen[None]) -> None:
+        self.dragging = True
+
+    def on_text_selected(self, event: events.TextSelected) -> None:
+        self.dragging = False
+
+    def get_widget_and_offset_at(
+        self, x: int, y: int
+    ) -> tuple[Widget | None, Offset | None]:
+        widget, offset = super().get_widget_and_offset_at(x, y)
+        if not self.dragging or (
+            isinstance(widget, Document) and offset is not None
+        ):
+            return widget, offset
+        # Textual extends drags that leave the text to the bottom of the
+        # whole document, which would copy lines the reader never saw.
+        document = self.query_one(Document)
+        return document, document.nearest_offset(x, y)
 
 
 class Reader(App[None]):
@@ -175,6 +224,9 @@ class Reader(App[None]):
         self.rendered_width = 0
         self.search_term = ""
         self.match_line = -1
+
+    def get_default_screen(self) -> Screen[None]:
+        return ReaderScreen(id="_default")
 
     def compose(self) -> ComposeResult:
         yield Status(id="status")

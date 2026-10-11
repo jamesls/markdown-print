@@ -169,6 +169,81 @@ def test_selection_after_scrolling_copies_visible_document_lines() -> None:
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize(
+    ("edge", "copies_pointer_line"),
+    [("left", False), ("right", True), ("scrollbar", True)],
+)
+@pytest.mark.parametrize("scrolled", [False, True])
+def test_drag_beside_text_selects_to_the_pointer_line(
+    edge: str, copies_pointer_line: bool, scrolled: bool
+) -> None:
+    async def scenario() -> None:
+        text = "  \n".join(f"Line {i}" for i in range(100))
+        reader, clipboard = make_reader(text)
+        async with reader.run_test(size=(100, 20)) as pilot:
+            await pilot.pause()
+            if scrolled:
+                await pilot.press("space")
+                await pilot.pause()
+            first = int(reader.query_one(VerticalScroll).scroll_y)
+            region = reader.query_one(Document).region
+            x = {
+                "left": region.x - 5,
+                "right": region.right + 5,
+                "scrollbar": reader.screen.size.width - 1,
+            }[edge]
+            await pilot.mouse_down(offset=(region.x, 0))
+            await pilot.hover(offset=(region.x + 4, 1))
+            await pilot.hover(offset=(x, 2))
+            await pilot.mouse_up(offset=(x, 2))
+            pointer_line = f"Line {first + 2}" if copies_pointer_line else ""
+            clipboard.assert_called_once_with(
+                f"Line {first}\nLine {first + 1}\n{pointer_line}"
+            )
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("search", [False, True])
+def test_drag_below_viewport_stops_at_last_visible_line(search: bool) -> None:
+    async def scenario() -> None:
+        text = "  \n".join(f"Line {i}" for i in range(100))
+        reader, clipboard = make_reader(text)
+        async with reader.run_test(size=(100, 20)) as pilot:
+            await pilot.pause()
+            if search:
+                await pilot.press("slash")
+                await pilot.pause()
+            visible_lines = reader.query_one(VerticalScroll).region.height
+            left = reader.query_one(Document).region.x
+            await pilot.mouse_down(offset=(left, 0))
+            await pilot.hover(offset=(left + 4, 1))
+            await pilot.hover(offset=(left + 4, 19))
+            await pilot.mouse_up(offset=(left + 4, 19))
+            clipboard.assert_called_once_with(
+                "\n".join(f"Line {i}" for i in range(visible_lines))
+            )
+
+    asyncio.run(scenario())
+
+
+def test_margin_press_after_a_drag_does_not_start_a_selection() -> None:
+    async def scenario() -> None:
+        reader, clipboard = make_reader("First line\nSecond line")
+        async with reader.run_test(size=(100, 20)) as pilot:
+            await pilot.pause()
+            left = reader.query_one(Document).region.x
+            await pilot.mouse_down(offset=(left, 0))
+            await pilot.mouse_up(offset=(left + 5, 0))
+            clipboard.assert_called_once_with("First")
+            await pilot.mouse_down(offset=(left - 5, 1))
+            await pilot.hover(offset=(left + 3, 1))
+            await pilot.mouse_up(offset=(left + 3, 1))
+            clipboard.assert_called_with("First")
+
+    asyncio.run(scenario())
+
+
 def test_clipboard_fallback_sends_text_to_terminal() -> None:
     async def scenario() -> None:
         reader, clipboard = make_reader("Hello world")
