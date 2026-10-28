@@ -227,19 +227,29 @@ def test_drag_below_viewport_stops_at_last_visible_line(search: bool) -> None:
     asyncio.run(scenario())
 
 
-def test_margin_press_after_a_drag_does_not_start_a_selection() -> None:
+@pytest.mark.parametrize("edge", ["margin", "scrollbar"])
+def test_drag_outside_text_after_a_drag_does_not_copy_again(
+    edge: str,
+) -> None:
     async def scenario() -> None:
-        reader, clipboard = make_reader("First line\nSecond line")
+        text = "  \n".join(f"Line {i}" for i in range(100))
+        reader, clipboard = make_reader(text)
         async with reader.run_test(size=(100, 20)) as pilot:
             await pilot.pause()
             left = reader.query_one(Document).region.x
             await pilot.mouse_down(offset=(left, 0))
-            await pilot.mouse_up(offset=(left + 5, 0))
-            clipboard.assert_called_once_with("First")
-            await pilot.mouse_down(offset=(left - 5, 1))
-            await pilot.hover(offset=(left + 3, 1))
-            await pilot.mouse_up(offset=(left + 3, 1))
-            clipboard.assert_called_with("First")
+            await pilot.mouse_up(offset=(left + 4, 0))
+            clipboard.assert_called_once_with("Line")
+            x = {
+                "margin": left - 5,
+                "scrollbar": reader.screen.size.width - 1,
+            }[edge]
+            await pilot.mouse_down(offset=(x, 1))
+            await pilot.hover(offset=(left + 3, 5))
+            await pilot.mouse_up(offset=(left + 3, 5))
+            clipboard.assert_called_once_with("Line")
+            scrolled = reader.query_one(VerticalScroll).scroll_y > 0
+            assert scrolled == (edge == "scrollbar")
 
     asyncio.run(scenario())
 
@@ -255,6 +265,21 @@ def test_clipboard_fallback_sends_text_to_terminal() -> None:
             assert "Copy sent to terminal" in str(
                 reader.query_one(Status).content
             )
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("native", [True, False])
+def test_search_pastes_the_copied_selection(native: bool) -> None:
+    async def scenario() -> None:
+        reader, clipboard = make_reader("Hello world")
+        clipboard.return_value = native
+        async with reader.run_test(size=(100, 20)) as pilot:
+            await pilot.mouse_down(Document, offset=(0, 0))
+            await pilot.mouse_up(Document, offset=(5, 0))
+            clipboard.assert_called_once_with("Hello")
+            await pilot.press("slash", "ctrl+v")
+            assert reader.query_one(Input).value == "Hello"
 
     asyncio.run(scenario())
 

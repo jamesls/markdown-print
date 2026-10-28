@@ -145,7 +145,10 @@ class Status(Static):
 
 
 class ReaderScreen(Screen[None]):
-    """Keeps document drags on the pointer's row when it leaves the text."""
+    """Keeps document drags on the pointer's row when it leaves the text.
+
+    Only releases that end a document drag report a text selection.
+    """
 
     dragging = var(False)
 
@@ -158,6 +161,11 @@ class ReaderScreen(Screen[None]):
         self.dragging = True
 
     def on_text_selected(self, event: events.TextSelected) -> None:
+        # Textual reports every mouse release, including scrollbar and
+        # margin drags that leave an earlier selection in place, which
+        # would copy it again over whatever the clipboard now holds.
+        if not self.dragging:
+            event.stop()
         self.dragging = False
 
     def get_widget_and_offset_at(
@@ -224,6 +232,17 @@ class Reader(App[None]):
         self.rendered_width = 0
         self.search_term = ""
         self.match_line = -1
+        self.copied_text = ""
+
+    @property
+    def clipboard(self) -> str:
+        # The search box pastes from here, but Textual only records text
+        # copied through OSC 52, not text copied with a native tool.
+        return self.copied_text
+
+    def copy_to_clipboard(self, text: str) -> None:
+        self.copied_text = text
+        super().copy_to_clipboard(text)
 
     def get_default_screen(self) -> Screen[None]:
         return ReaderScreen(id="_default")
@@ -281,6 +300,7 @@ class Reader(App[None]):
             return
         text = result[0]
         if self.clipboard_writer(text):
+            self.copied_text = text
             self.show_status("Copied selection | Esc clears | q quit")
         else:
             self.copy_to_clipboard(text)
