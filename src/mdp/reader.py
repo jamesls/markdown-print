@@ -16,6 +16,7 @@ from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
 from textual.containers import VerticalScroll
+from textual.driver import Driver
 from textual.geometry import Offset
 from textual.message import Message
 from textual.reactive import var
@@ -124,12 +125,13 @@ class Document(Static):
                 lines[index] = line[max(0, indent - column) :]
         return "\n".join(line.rstrip() for line in lines), ending
 
-    def nearest_offset(self, x: int, y: int) -> Offset:
+    def nearest_offset(self, x: int, y: int, start: Offset) -> Offset:
         """Return the visible text position closest to a screen position.
 
         Positions beside a line resolve to its start or end, and positions
         past the visible lines resolve to the nearest visible line, so a
-        drag never reaches text scrolled out of view.
+        drag never reaches text scrolled out of view. `start` is where the
+        drag began, which decides how a drag stops before a line.
         """
         lines = str(self.content).split("\n")
         region = self.content_region
@@ -137,7 +139,13 @@ class Document(Static):
         row = min(max(y, visible.y), visible.bottom - 1) - region.y
         row = min(row, len(lines) - 1)
         before = y < visible.y or (y < visible.bottom and x < region.x)
-        return Offset(0 if before else len(lines[row]), row)
+        if not before:
+            return Offset(len(lines[row]), row)
+        if row > start.y:
+            # Textual selects the character under the end of a drag, so
+            # stop at the end of the line above instead of this row's start.
+            return Offset(len(lines[row - 1]), row - 1)
+        return Offset(0, row)
 
 
 class Status(Static):
@@ -150,36 +158,36 @@ class ReaderScreen(Screen[None]):
     Only releases that end a document drag report a text selection.
     """
 
-    dragging = var(False)
+    drag_start: var[Offset | None] = var(None)
 
-    def on_mount(self) -> None:
-        self.text_selection_started_signal.subscribe(
-            self, self.start_drag, immediate=True
-        )
-
-    def start_drag(self, screen: Screen[None]) -> None:
-        self.dragging = True
+    def _forward_event(self, event: events.Event) -> None:
+        # Textual no longer publishes `text_selection_started_signal`, so
+        # note where a press lands before the screen starts selecting.
+        if isinstance(event, events.MouseDown) and not event.is_forwarded:
+            widget, offset = super().get_widget_and_offset_at(event.x, event.y)
+            self.drag_start = offset if isinstance(widget, Document) else None
+        super()._forward_event(event)
 
     def on_text_selected(self, event: events.TextSelected) -> None:
         # Textual reports every mouse release, including scrollbar and
         # margin drags that leave an earlier selection in place, which
         # would copy it again over whatever the clipboard now holds.
-        if not self.dragging:
+        if self.drag_start is None:
             event.stop()
-        self.dragging = False
+        self.drag_start = None
 
     def get_widget_and_offset_at(
         self, x: int, y: int
     ) -> tuple[Widget | None, Offset | None]:
         widget, offset = super().get_widget_and_offset_at(x, y)
-        if not self.dragging or (
+        if self.drag_start is None or (
             isinstance(widget, Document) and offset is not None
         ):
             return widget, offset
         # Textual extends drags that leave the text to the bottom of the
         # whole document, which would copy lines the reader never saw.
         document = self.query_one(Document)
-        return document, document.nearest_offset(x, y)
+        return document, document.nearest_offset(x, y, self.drag_start)
 
 
 class Reader(App[None]):
@@ -200,8 +208,8 @@ class Reader(App[None]):
         Binding("escape", "cancel", "Clear", priority=True),
         Binding("j,down", "move(1)", show=False),
         Binding("k,up", "move(-1)", show=False),
-        Binding("space,f,pagedown", "page(1)", show=False),
-        Binding("b,pageup", "page(-1)", show=False),
+        Binding("space,f,ctrl+f,pagedown", "page(1)", show=False),
+        Binding("b,ctrl+b,pageup", "page(-1)", show=False),
         Binding("g,home", "edge(False)", show=False),
         Binding("G,end", "edge(True)", show=False),
         Binding("slash", "search", "Search"),
@@ -221,7 +229,7 @@ class Reader(App[None]):
     ) -> None:
         super().__init__(ansi_color=True)
         # Preserve terminal defaults instead of mapping them to theme RGB.
-        self.theme = "textual-ansi"
+        self.theme = "ansi-dark"
         self.renderable = renderable
         self.render_console = render_console
         self.clipboard_writer = clipboard_writer
@@ -243,6 +251,18 @@ class Reader(App[None]):
     def copy_to_clipboard(self, text: str) -> None:
         self.copied_text = text
         super().copy_to_clipboard(text)
+
+    def get_driver_class(self) -> type[Driver]:
+        driver_class = super().get_driver_class()
+        # Textual's Unix driver needs termios, which Windows doesn't have.
+        if sys.platform != "win32":
+            from textual.drivers.linux_driver import LinuxDriver
+
+            from mdp.driver import ReaderDriver
+
+            if driver_class is LinuxDriver:
+                return ReaderDriver
+        return driver_class
 
     def get_default_screen(self) -> Screen[None]:
         return ReaderScreen(id="_default")

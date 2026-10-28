@@ -41,9 +41,10 @@ escape sequences. Rendered line breaks and visible Markdown decorations
 (such as list bullets) are preserved.
 
 You can also press `Ctrl+C` or `y` to copy the selection again. `Esc` clears
-it. Use the mouse wheel or arrow keys to scroll, `Space`/`b` to page down/up,
-`g`/`G` to jump to the beginning/end, and `q` to quit. `/` opens search;
-press `Enter` to find text and `n`/`N` for the next/previous matching line.
+it. Use the mouse wheel or arrow keys to scroll, `Space`/`b` or
+`Ctrl+F`/`Ctrl+B` to page down/up, `g`/`G` to jump to the beginning/end, and
+`q` to quit. `/` opens search; press `Enter` to find text and `n`/`N` for the
+next/previous matching line.
 
 Copying uses `pbcopy` on macOS, or `wl-copy`, `xclip`, or `xsel` when
 available on Linux. Otherwise, including over SSH, it sends a clipboard

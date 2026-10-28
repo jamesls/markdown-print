@@ -9,10 +9,10 @@ from unittest.mock import Mock
 import pytest
 from rich.console import Console
 from rich.text import Text
+from textual.containers import VerticalScroll
 from textual.geometry import Offset
 from textual.selection import Selection
 from textual.widgets import Input
-from textual.containers import VerticalScroll
 
 from mdp import DEFAULT_CONSOLE_THEME
 from mdp.markdown import SelectableMarkdown
@@ -91,8 +91,10 @@ def test_copy_preserves_code_indentation_and_blank_lines() -> None:
     [
         "- item\n\n  ```python\n  def f():\n      return 42\n  ```",
         "> quote\n>\n> ```python\n> def f():\n>     return 42\n> ```",
-        "- outer\n\n  - inner\n\n"
-        "    ```python\n    def f():\n        return 42\n    ```",
+        (
+            "- outer\n\n  - inner\n\n"
+            "    ```python\n    def f():\n        return 42\n    ```"
+        ),
     ],
     ids=["list", "quote", "nested-list"],
 )
@@ -170,6 +172,25 @@ def test_selection_after_scrolling_copies_visible_document_lines() -> None:
 
 
 @pytest.mark.parametrize(
+    ("forward", "back"),
+    [("space", "b"), ("f", "b"), ("ctrl+f", "ctrl+b")],
+)
+def test_page_keys_scroll_a_screen_like_less(forward: str, back: str) -> None:
+    async def scenario() -> None:
+        text = "  \n".join(f"Line {i}" for i in range(100))
+        reader, _ = make_reader(text)
+        async with reader.run_test(size=(100, 20)) as pilot:
+            await pilot.pause()
+            viewport = reader.query_one(VerticalScroll)
+            await pilot.press(forward, forward)
+            assert viewport.scroll_y == 2 * (viewport.size.height - 1)
+            await pilot.press(back)
+            assert viewport.scroll_y == viewport.size.height - 1
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
     ("edge", "copies_pointer_line"),
     [("left", False), ("right", True), ("scrollbar", True)],
 )
@@ -196,10 +217,26 @@ def test_drag_beside_text_selects_to_the_pointer_line(
             await pilot.hover(offset=(region.x + 4, 1))
             await pilot.hover(offset=(x, 2))
             await pilot.mouse_up(offset=(x, 2))
-            pointer_line = f"Line {first + 2}" if copies_pointer_line else ""
-            clipboard.assert_called_once_with(
-                f"Line {first}\nLine {first + 1}\n{pointer_line}"
-            )
+            lines = [f"Line {first}", f"Line {first + 1}"]
+            if copies_pointer_line:
+                lines.append(f"Line {first + 2}")
+            clipboard.assert_called_once_with("\n".join(lines))
+
+    asyncio.run(scenario())
+
+
+def test_drag_up_beside_text_selects_from_the_pointer_line_start() -> None:
+    async def scenario() -> None:
+        text = "  \n".join(f"Line {i}" for i in range(100))
+        reader, clipboard = make_reader(text)
+        async with reader.run_test(size=(100, 20)) as pilot:
+            await pilot.pause()
+            region = reader.query_one(Document).region
+            await pilot.mouse_down(offset=(region.x + 3, 2))
+            await pilot.hover(offset=(region.x + 1, 1))
+            await pilot.hover(offset=(region.x - 5, 0))
+            await pilot.mouse_up(offset=(region.x - 5, 0))
+            clipboard.assert_called_once_with("Line 0\nLine 1\nLine")
 
     asyncio.run(scenario())
 
@@ -316,8 +353,10 @@ def test_copy_native_transfers_exact_utf8_text(tmp_path: Path) -> None:
     command = [
         sys.executable,
         "-c",
-        "import pathlib, sys; "
-        "pathlib.Path(sys.argv[1]).write_bytes(sys.stdin.buffer.read())",
+        (
+            "import pathlib, sys; "
+            "pathlib.Path(sys.argv[1]).write_bytes(sys.stdin.buffer.read())"
+        ),
         str(destination),
     ]
     text = "界\n    indented\n"

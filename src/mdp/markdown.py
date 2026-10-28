@@ -4,8 +4,8 @@ from typing import ClassVar
 
 from rich import box
 from rich.console import Console, ConsoleOptions, RenderResult
-from rich.markdown import Heading as RichHeading
 from rich.markdown import CodeBlock as RichCodeBlock
+from rich.markdown import Heading as RichHeading
 from rich.markdown import Markdown as RichMarkdown
 from rich.markdown import MarkdownElement
 from rich.panel import Panel

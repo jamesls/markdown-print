@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import subprocess
 import re
+import subprocess
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -21,7 +21,7 @@ from mdp.markdown import LeftAlignedMarkdown, SelectableMarkdown
 
 def _run_less(args: list[str], content: str) -> None:
     """Default command runner that invokes subprocess.run."""
-    subprocess.run(args, input=content, text=True)
+    subprocess.run(args, input=content, text=True, check=False)
 
 
 class LessPager(Pager):
@@ -44,7 +44,7 @@ class LessPager(Pager):
         self._runner(args, content)
 
 
-__all__ = ["render_markdown", "LeftAlignedMarkdown"]
+__all__ = ["LeftAlignedMarkdown", "render_markdown"]
 
 DEFAULT_CODE_THEME = "nord-darker"
 DEFAULT_WIDTH = 100
