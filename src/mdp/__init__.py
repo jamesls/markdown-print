@@ -96,17 +96,17 @@ def _iter_countable_text_fragments(markdown_text: str) -> list[str]:
     return text_fragments
 
 
+def reading_minutes(word_count: int) -> int:
+    """Return the whole minutes needed to read `word_count` words."""
+    return -(-word_count // AVERAGE_READING_SPEED_WPM)
+
+
 def _get_document_stats(markdown_text: str) -> DocumentStats:
     readable_text = " ".join(_iter_countable_text_fragments(markdown_text))
     word_count = len(WORD_PATTERN.findall(readable_text))
-    reading_time_minutes = (
-        max(1, -(-word_count // AVERAGE_READING_SPEED_WPM))
-        if word_count
-        else 0
-    )
     return DocumentStats(
         word_count=word_count,
-        reading_time_minutes=reading_time_minutes,
+        reading_time_minutes=reading_minutes(word_count),
     )
 
 
@@ -185,6 +185,7 @@ def render_markdown(
             width=width,
             center=center,
             stats=footer.plain,
+            word_count=stats.word_count,
         )
         return
     renderable: RenderableType = Group(markdown, Text(""), footer)

@@ -291,6 +291,43 @@ def test_drag_outside_text_after_a_drag_does_not_copy_again(
     asyncio.run(scenario())
 
 
+def test_status_shows_reading_time_left_from_the_top_line() -> None:
+    async def scenario() -> None:
+        code = "```python\n" + "print('hello world', 1, 2, 3)\n" * 60 + "```"
+        # 200 items of 10 counted words each; the rendered list numbers and
+        # the code block don't count toward the 10 minute total.
+        items = "\n".join(
+            f"{i + 1}. Line {i} " + "word " * 8 for i in range(200)
+        )
+        reader = Reader(
+            SelectableMarkdown(f"{code}\n\n{items}"),
+            Console(theme=DEFAULT_CONSOLE_THEME),
+            Mock(spec=Callable[[str], bool]),
+            stats="2,000 words • ~10 min read",
+            word_count=2000,
+        )
+        async with reader.run_test(size=(100, 20)) as pilot:
+            await pilot.pause()
+            status = reader.query_one(Status)
+            assert str(status.content).startswith(
+                "2,000 words • ~10 min read • ~10 min left | Drag to copy"
+            )
+            rows = reader.document_text.plain.split("\n")
+            viewport = reader.query_one(VerticalScroll)
+            for line, left in [(0, 10), (119, 5), (120, 4)]:
+                row = next(
+                    i for i, text in enumerate(rows) if f"Line {line} " in text
+                )
+                viewport.scroll_to(y=row, animate=False)
+                await pilot.pause()
+                assert f"~{left} min left |" in str(status.content)
+            # The last screen still has 19 lines of 10 words to read.
+            await pilot.press("G")
+            assert "~1 min left |" in str(status.content)
+
+    asyncio.run(scenario())
+
+
 def test_clipboard_fallback_sends_text_to_terminal() -> None:
     async def scenario() -> None:
         reader, clipboard = make_reader("Hello world")
