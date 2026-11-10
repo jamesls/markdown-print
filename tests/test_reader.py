@@ -309,9 +309,6 @@ def test_status_shows_reading_time_left_from_the_top_line() -> None:
         async with reader.run_test(size=(100, 20)) as pilot:
             await pilot.pause()
             status = reader.query_one(Status)
-            assert str(status.content).startswith(
-                "2,000 words • ~10 min read • ~10 min left | Drag to copy"
-            )
             rows = reader.document_text.plain.split("\n")
             viewport = reader.query_one(VerticalScroll)
             for line, left in [(0, 10), (119, 5), (120, 4)]:
@@ -320,10 +317,12 @@ def test_status_shows_reading_time_left_from_the_top_line() -> None:
                 )
                 viewport.scroll_to(y=row, animate=False)
                 await pilot.pause()
-                assert f"~{left} min left |" in str(status.content)
+                assert str(status.content) == (
+                    f"2,000 words • ~10 min read • ~{left} min left"
+                )
             # The last screen still has 19 lines of 10 words to read.
             await pilot.press("G")
-            assert "~1 min left |" in str(status.content)
+            assert str(status.content).endswith("~1 min left")
 
     asyncio.run(scenario())
 

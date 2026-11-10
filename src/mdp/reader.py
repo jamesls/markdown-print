@@ -321,9 +321,7 @@ class Reader(App[None]):
         self.refresh_status()
 
     def show_status(self, message: str = "") -> None:
-        self.hint = (
-            message or "Drag to copy | Ctrl+C/y copy | / search | q quit"
-        )
+        self.hint = message
         self.refresh_status()
 
     def refresh_status(self) -> None:
@@ -338,9 +336,10 @@ class Reader(App[None]):
             else 0
         )
         left = reading_minutes(self.word_count - read)
-        self.query_one("#status", Status).update(
-            f"{self.stats} • ~{left} min left | {self.hint}"
-        )
+        status = f"{self.stats} • ~{left} min left"
+        if self.hint:
+            status += f" | {self.hint}"
+        self.query_one("#status", Status).update(status)
 
     def on_text_selected(self, event: events.TextSelected) -> None:
         self.action_copy_selection()
@@ -357,12 +356,10 @@ class Reader(App[None]):
         text = result[0]
         if self.clipboard_writer(text):
             self.copied_text = text
-            self.show_status("Copied selection | Esc clears | q quit")
+            self.show_status("Copied selection | Esc clears")
         else:
             self.copy_to_clipboard(text)
-            self.show_status(
-                "Copy sent to terminal (requires OSC 52) | q quit"
-            )
+            self.show_status("Copy sent to terminal via OSC 52")
 
     def action_cancel(self) -> None:
         self.screen.clear_selection()
@@ -416,9 +413,9 @@ class Reader(App[None]):
                     "reverse",
                 )
                 self.query_one(Document).update(highlighted)
-                self.show_status("Match | n next | N previous | / search")
+                self.show_status("Match | n next | N previous")
                 return
-        self.show_status("No matches | / search | q quit")
+        self.show_status("No matches")
 
 
 def show_reader(
