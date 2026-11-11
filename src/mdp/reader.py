@@ -25,6 +25,8 @@ from textual.selection import Selection
 from textual.widget import Widget
 from textual.widgets import Input, Static
 
+from mdp import WORD_PATTERN, reading_minutes
+
 
 def clipboard_command() -> list[str]:
     """Find a local clipboard writer; remote sessions use terminal copying."""
@@ -226,6 +228,7 @@ class Reader(App[None]):
         width: int = 100,
         center: bool = True,
         stats: str = "",
+        word_count: int = 0,
     ) -> None:
         super().__init__(ansi_color=True)
         # Preserve terminal defaults instead of mapping them to theme RGB.
@@ -236,7 +239,10 @@ class Reader(App[None]):
         self.document_width = width
         self.center = center
         self.stats = stats
+        self.word_count = word_count
         self.document_text = Text()
+        self.line_words: list[int] = []
+        self.hint = ""
         self.rendered_width = 0
         self.search_term = ""
         self.match_line = -1
@@ -283,6 +289,12 @@ class Reader(App[None]):
         self.query_one("#viewport").focus()
         self.call_after_refresh(self.refresh_document)
         self.show_status()
+        self.watch(
+            self.query_one("#viewport"),
+            "scroll_y",
+            self.refresh_status,
+            init=False,
+        )
 
     def on_resize(self, event: events.Resize) -> None:
         self.call_after_refresh(self.refresh_document)
@@ -300,11 +312,34 @@ class Reader(App[None]):
         self.document_text = render_text(
             self.renderable, self.render_console, width
         )
+        # Code blocks don't count toward the reading time, so skip them.
+        self.line_words = [
+            0 if code_indent(line) else len(WORD_PATTERN.findall(line.plain))
+            for line in self.document_text.split("\n", allow_blank=True)
+        ]
         document.update(self.document_text)
+        self.refresh_status()
 
     def show_status(self, message: str = "") -> None:
-        hint = message or "Drag to copy | Ctrl+C/y copy | / search | q quit"
-        self.query_one("#status", Status).update(f"{self.stats} | {hint}")
+        self.hint = message
+        self.refresh_status()
+
+    def refresh_status(self) -> None:
+        """Show the time left to read from the top of the viewport."""
+        top = int(self.query_one("#viewport", VerticalScroll).scroll_y)
+        rendered = sum(self.line_words)
+        # Rendered text also counts words the total skips, such as list
+        # numbers, so scale the words above the viewport to the total.
+        read = (
+            self.word_count * sum(self.line_words[:top]) // rendered
+            if rendered
+            else 0
+        )
+        left = reading_minutes(self.word_count - read)
+        status = f"{self.stats} • ~{left} min left"
+        if self.hint:
+            status += f" | {self.hint}"
+        self.query_one("#status", Status).update(status)
 
     def on_text_selected(self, event: events.TextSelected) -> None:
         self.action_copy_selection()
@@ -321,12 +356,10 @@ class Reader(App[None]):
         text = result[0]
         if self.clipboard_writer(text):
             self.copied_text = text
-            self.show_status("Copied selection | Esc clears | q quit")
+            self.show_status("Copied selection | Esc clears")
         else:
             self.copy_to_clipboard(text)
-            self.show_status(
-                "Copy sent to terminal (requires OSC 52) | q quit"
-            )
+            self.show_status("Copy sent to terminal via OSC 52")
 
     def action_cancel(self) -> None:
         self.screen.clear_selection()
@@ -380,9 +413,9 @@ class Reader(App[None]):
                     "reverse",
                 )
                 self.query_one(Document).update(highlighted)
-                self.show_status("Match | n next | N previous | / search")
+                self.show_status("Match | n next | N previous")
                 return
-        self.show_status("No matches | / search | q quit")
+        self.show_status("No matches")
 
 
 def show_reader(
@@ -392,6 +425,7 @@ def show_reader(
     width: int,
     center: bool,
     stats: str,
+    word_count: int,
 ) -> None:
     reader = Reader(
         renderable,
@@ -400,5 +434,6 @@ def show_reader(
         width=width,
         center=center,
         stats=stats,
+        word_count=word_count,
     )
     reader.run()
