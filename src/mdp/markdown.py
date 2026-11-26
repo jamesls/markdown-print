@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from itertools import count
 from typing import ClassVar
 
 from rich import box
@@ -57,9 +58,26 @@ class SelectableCodeBlock(RichCodeBlock):
                 yield Styled(renderable, style)
 
 
+_heading_ids = count()
+
+
+class OutlinedHeading(LeftAlignedHeading):
+    def __rich_console__(
+        self, console: Console, options: ConsoleOptions
+    ) -> RenderResult:
+        # Mark the heading's own text, not its `#` prefix, so the reader can
+        # list it in the table of contents and find the row it renders on.
+        # The ID tells apart headings on adjacent rows, such as in a list,
+        # from one heading that wraps onto several rows.
+        heading = (next(_heading_ids), int(self.tag[1]), self.text.plain)
+        self.text.stylize(Style(meta={"mdp_heading": heading}))
+        yield from super().__rich_console__(console, options)
+
+
 class SelectableMarkdown(LeftAlignedMarkdown):
     elements: ClassVar[dict[str, type[MarkdownElement]]] = dict(
         LeftAlignedMarkdown.elements
     )
+    elements["heading_open"] = OutlinedHeading
     elements["fence"] = SelectableCodeBlock
     elements["code_block"] = SelectableCodeBlock
