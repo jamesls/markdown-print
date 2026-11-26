@@ -12,11 +12,18 @@ from rich.text import Text
 from textual.containers import VerticalScroll
 from textual.geometry import Offset
 from textual.selection import Selection
-from textual.widgets import Input
+from textual.widgets import Input, OptionList
 
 from mdp import DEFAULT_CONSOLE_THEME
 from mdp.markdown import SelectableMarkdown
-from mdp.reader import Document, Reader, Status, copy_native, render_text
+from mdp.reader import (
+    Document,
+    Reader,
+    Status,
+    copy_native,
+    find_headings,
+    render_text,
+)
 
 
 def make_reader(text: str, *, width: int = 40) -> tuple[Reader, Mock]:
@@ -372,6 +379,98 @@ def test_search_accepts_reader_shortcuts_as_text_and_finds_matches() -> None:
             assert reader.match_line == 30
 
     asyncio.run(scenario())
+
+
+def test_contents_lists_headings_and_jumps_to_the_selected_one() -> None:
+    async def scenario() -> None:
+        filler = "\n\n".join(f"Filler {i}" for i in range(30))
+        long_title = "A long heading that wraps across lines"
+        text = (
+            f"# Title\n\n{filler}\n\n## {long_title}\n\n{filler}\n\n"
+            f"# Second\n\n{filler}\n\n### Deep\n\n{filler}"
+        )
+        reader, _ = make_reader(text, width=20)
+        async with reader.run_test(size=(100, 20)) as pilot:
+            await pilot.pause()
+            contents = reader.query_one(OptionList)
+            assert not contents.display
+            await pilot.press("t")
+            assert contents.display
+            assert contents.has_focus
+            assert [
+                str(contents.get_option_at_index(i).prompt)
+                for i in range(contents.option_count)
+            ] == ["Title", f"  {long_title}", "Second", "    Deep"]
+            assert contents.highlighted == 0
+            await pilot.press("j", "enter")
+            assert not contents.display
+            viewport = reader.query_one(VerticalScroll)
+            rows = reader.document_text.plain.split("\n")
+            assert rows[int(viewport.scroll_y)].startswith("## A long")
+            # Jumping to an H1 shows its panel's top border, and reopening
+            # starts at that section rather than the one before it.
+            await pilot.press("t", "j", "enter")
+            assert "Second" in rows[int(viewport.scroll_y) + 1]
+            await pilot.press("t")
+            assert contents.highlighted == 2
+            # Resizing while open keeps the place, so Enter still jumps.
+            await pilot.resize_terminal(60, 20)
+            await pilot.pause()
+            await pilot.press("k", "enter")
+            assert not contents.display
+            rows = reader.document_text.plain.split("\n")
+            assert rows[int(viewport.scroll_y)].startswith("## A long")
+            await pilot.press("t", "t")
+            assert not contents.display
+            assert viewport.has_focus
+
+    asyncio.run(scenario())
+
+
+def test_contents_cursor_uses_reverse_video_of_terminal_colors() -> None:
+    async def scenario() -> None:
+        reader, _ = make_reader("# One\n\n## Two\n\n## Three")
+        async with reader.run_test(size=(100, 20)) as pilot:
+            await pilot.pause()
+            await pilot.press("t", "j")
+            await pilot.pause()
+            contents = reader.query_one(OptionList)
+
+            def row_styles(y: int) -> set[tuple[bool, bool, bool]]:
+                return {
+                    (
+                        bool(segment.style.reverse),
+                        segment.style.color is not None
+                        and segment.style.color.is_default,
+                        segment.style.bgcolor is not None
+                        and segment.style.bgcolor.is_default,
+                    )
+                    for segment in contents.render_line(y)
+                    if segment.style is not None
+                }
+
+            assert row_styles(1) == {(True, True, True)}
+            assert row_styles(0) == row_styles(2) == {(False, True, True)}
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    ("markdown", "expected"),
+    [
+        ("### First line\n\nbody", [(3, "First line")]),
+        ("- ### A\n- ### B", [(3, "A"), (3, "B")]),
+        ("> ## A\n> ### B", [(2, "A"), (3, "B")]),
+    ],
+    ids=["first-row", "list", "quote"],
+)
+def test_find_headings_lists_each_heading_once(
+    markdown: str, expected: list[tuple[int, str]]
+) -> None:
+    rendered = render_text(SelectableMarkdown(markdown), Console(), 40)
+    assert [
+        (level, title) for _, level, title in find_headings(rendered)
+    ] == expected
 
 
 def test_render_text_preserves_styles_and_indentation_without_padding() -> (

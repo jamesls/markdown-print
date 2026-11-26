@@ -44,7 +44,9 @@ You can also press `Ctrl+C` or `y` to copy the selection again. `Esc` clears
 it. Use the mouse wheel or arrow keys to scroll, `Space`/`b` or
 `Ctrl+F`/`Ctrl+B` to page down/up, `g`/`G` to jump to the beginning/end, and
 `q` to quit. `/` opens search; press `Enter` to find text and `n`/`N` for the
-next/previous matching line.
+next/previous matching line. `t` toggles a table of contents of the
+document's headings; move with the arrow keys or `j`/`k` and press `Enter`
+(or click a heading) to jump to that section.
 
 Copying uses `pbcopy` on macOS, or `wl-copy`, `xclip`, or `xsel` when
 available on Linux. Otherwise, including over SSH, it sends a clipboard

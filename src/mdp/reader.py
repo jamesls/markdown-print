@@ -22,8 +22,9 @@ from textual.message import Message
 from textual.reactive import var
 from textual.screen import Screen
 from textual.selection import Selection
+from textual.strip import Strip
 from textual.widget import Widget
-from textual.widgets import Input, Static
+from textual.widgets import Input, OptionList, Static
 
 from mdp import WORD_PATTERN, reading_minutes
 
@@ -99,6 +100,44 @@ def code_indent(line: Text) -> int:
         if isinstance(style, Style) and style.meta.get("mdp_code")
     ]
     return min(starts) + 1 if starts else 0
+
+
+def find_headings(text: Text) -> list[tuple[int, int, str]]:
+    """Return the first row, level, and title of each rendered heading."""
+    headings: list[tuple[int, int, str]] = []
+    seen: set[int] = set()
+    for row, line in enumerate(text.split("\n", allow_blank=True)):
+        for _, _, style in line.spans:
+            if not isinstance(style, Style):
+                continue
+            heading = style.meta.get("mdp_heading")
+            # A heading that wraps tags several rows; list it at its first.
+            if heading and heading[0] not in seen:
+                seen.add(heading[0])
+                headings.append((row, heading[1], heading[2]))
+    return headings
+
+
+class Contents(OptionList):
+    """The document's headings, indented by level."""
+
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("j", "cursor_down", show=False),
+        Binding("k", "cursor_up", show=False),
+    ]
+
+    def render_line(self, y: int) -> Strip:
+        strip = super().render_line(y)
+        # Reverse video swaps the terminal's own foreground and background,
+        # so the cursor stands out under any color scheme. CSS can't ask for
+        # it: Textual drops `reverse` from option list text styles.
+        line_number = self.scroll_offset.y + y
+        if not self.has_focus or line_number >= len(self._lines):
+            return strip
+        option_index, _ = self._lines[line_number]
+        if option_index == self.highlighted:
+            return strip.apply_style(Style(reverse=True))
+        return strip
 
 
 class Document(Static):
@@ -197,11 +236,22 @@ class Reader(App[None]):
 
     ENABLE_COMMAND_PALETTE = False
     CSS = """
-    Screen { background: ansi_default; color: ansi_default; }
+    Screen {
+        background: ansi_default; color: ansi_default; layers: base contents;
+    }
     #viewport { align-horizontal: center; scrollbar-size: 1 1; }
     #document { width: 100%; height: auto; }
     #status { dock: bottom; height: 1; color: ansi_default; text-style: dim; }
     #search { dock: bottom; display: none; height: 3; }
+    #contents {
+        layer: contents; dock: left; display: none;
+        width: auto; max-width: 50%; margin-bottom: 1;
+        border: round $foreground 50%; background: ansi_default;
+        text-wrap: nowrap; text-overflow: ellipsis;
+        &:focus > .option-list--option-highlighted {
+            background: ansi_default; color: ansi_default; text-style: bold;
+        }
+    }
     """
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("q", "quit", "Quit"),
@@ -215,6 +265,7 @@ class Reader(App[None]):
         Binding("g,home", "edge(False)", show=False),
         Binding("G,end", "edge(True)", show=False),
         Binding("slash", "search", "Search"),
+        Binding("t", "toggle_contents", "Contents"),
         Binding("n", "next_match(1)", show=False),
         Binding("N", "next_match(-1)", show=False),
     ]
@@ -242,6 +293,7 @@ class Reader(App[None]):
         self.word_count = word_count
         self.document_text = Text()
         self.line_words: list[int] = []
+        self.headings: list[tuple[int, int, str]] = []
         self.hint = ""
         self.rendered_width = 0
         self.search_term = ""
@@ -278,6 +330,7 @@ class Reader(App[None]):
         yield Input(
             placeholder="Search (Enter to find, Esc to close)", id="search"
         )
+        yield Contents(id="contents")
         with VerticalScroll(id="viewport"):
             yield Document(id="document")
 
@@ -318,6 +371,21 @@ class Reader(App[None]):
             for line in self.document_text.split("\n", allow_blank=True)
         ]
         document.update(self.document_text)
+        # An H1 renders in a panel, so its section starts at the panel's
+        # top border, both for jumping to it and for finding the section
+        # in view.
+        self.headings = [
+            (row - 1 if level == 1 else row, level, title)
+            for row, level, title in find_headings(self.document_text)
+        ]
+        contents = self.query_one(Contents)
+        # Resizing keeps the same headings, so keep the open list's place.
+        highlighted = contents.highlighted
+        contents.set_options(
+            Text("  " * (level - 1) + title)
+            for _, level, title in self.headings
+        )
+        contents.highlighted = highlighted
         self.refresh_status()
 
     def show_status(self, message: str = "") -> None:
@@ -365,6 +433,7 @@ class Reader(App[None]):
         self.screen.clear_selection()
         self.query_one(Document).update(self.document_text)
         self.query_one("#search", Input).display = False
+        self.query_one(Contents).display = False
         self.query_one("#viewport").focus()
         self.show_status()
 
@@ -389,6 +458,33 @@ class Reader(App[None]):
         search = self.query_one("#search", Input)
         search.display = True
         search.focus()
+
+    def action_toggle_contents(self) -> None:
+        contents = self.query_one(Contents)
+        if contents.display:
+            self.action_cancel()
+            return
+        if not self.headings:
+            self.show_status("No headings")
+            return
+        # Start from the section the reader is in, the last heading above
+        # the top of the viewport.
+        top = self.query_one("#viewport", VerticalScroll).scroll_y
+        contents.highlighted = max(
+            0, sum(1 for row, _, _ in self.headings if row <= top) - 1
+        )
+        contents.display = True
+        contents.focus()
+        self.show_status("Enter jumps | t or Esc closes")
+
+    def on_option_list_option_selected(
+        self, event: OptionList.OptionSelected
+    ) -> None:
+        row, _, _ = self.headings[event.option_index]
+        self.action_cancel()
+        self.query_one("#viewport", VerticalScroll).scroll_to(
+            y=row, animate=False
+        )
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         self.search_term = event.value
